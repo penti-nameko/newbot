@@ -1,4 +1,6 @@
+import discord
 from keep_alive import keep_alive
+import os
 from flask import Flask
 from threading import Thread
 
