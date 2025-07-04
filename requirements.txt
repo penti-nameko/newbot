@@ -1,5 +1,5 @@
-discord.py
-Flask
-python-dotenv
-gunicorn==
-PyNaCl
+discord.py==2.3.2
+Flask==2.3.2
+python-dotenv==1.0.0
+gunicorn==21.2.0  # ここを修正！または単に `gunicorn`
+PyNaCl==1.5.0
