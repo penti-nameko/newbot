@@ -1,5 +1,5 @@
-discord.py==2.3.2 # あなたのバージョンに合わせてください
-Flask==2.3.2
-python-dotenv==1.0.0
-gunicorn==21.2.0
-PyNaCl==1.5.0 # これを追加！
+discord.py
+Flask
+python-dotenv
+gunicorn==
+PyNaCl
