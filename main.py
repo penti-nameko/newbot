@@ -1,5 +1,3 @@
-# main.py の例
-
 import os
 import discord
 from dotenv import load_dotenv # .env ファイルから環境変数を読み込むために必要
@@ -26,7 +24,8 @@ intents.message_content = True
 # intents.presences = True # PRESENCE INTENT をDiscord開発者ポータルで有効にする必要あり
 
 # Discordクライアントの初期化
-client = discord.Client(intents=intents)
+# ★★★ ここが重要！音声機能を使わないなら 'voice_client_class=None' を追加 ★★★
+client = discord.Client(intents=intents, voice_client_class=None) # これを追加！
 
 # ボットが起動したときに実行されるイベント
 @client.event
