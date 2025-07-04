@@ -1,66 +1,63 @@
+# main.py の例
+
 import os
 import discord
-from discord.ext import commands
-import asyncio
-from keep_alive import keep_alive # keep_alive.py から keep_alive 関数をインポート
+from dotenv import load_dotenv # .env ファイルから環境変数を読み込むために必要
 
-# --- Discord Botの設定 ---
-# 環境変数からボットのトークンを取得
-# Render.comの環境変数に 'BOT_TOKEN' としてDiscordボットのトークンを設定してください。
+# Flaskサーバーのインポート（keep_alive.py を使用している場合）
+from keep_alive import keep_alive
+
+# .env ファイルを読み込む
+# Renderでは環境変数を直接設定するため、この行は主にローカルテスト用ですが、
+# コードに残しておくのは問題ありません。
+load_dotenv()
+
+# Discordボットのトークンを環境変数から取得
 TOKEN = os.getenv('BOT_TOKEN')
 
-# Discordのインテントを設定
-# メッセージの内容を読み取るために message_content インテントを有効にします。
-# Discord開発者ポータルでPrivileged Gateway IntentsのMessage Content Intentも有効にしてください。
+# intents（インテント）の設定
+# これが非常に重要です！ボットがどのようなイベントを受信するかを定義します。
+# 必要な権限をDiscord開発者ポータルで有効にし、ここでも設定します。
 intents = discord.Intents.default()
+# 一般的なボットでメッセージの内容を読み取るには以下が必須
 intents.message_content = True
+# メンバーリストやプレゼンス（オンライン状態など）が必要な場合
+# intents.members = True # GUILD MEMBERS INTENT をDiscord開発者ポータルで有効にする必要あり
+# intents.presences = True # PRESENCE INTENT をDiscord開発者ポータルで有効にする必要あり
 
-# コマンドプレフィックスを '!' に設定
-bot = commands.Bot(command_prefix="!", intents=intents)
+# Discordクライアントの初期化
+client = discord.Client(intents=intents)
 
-@bot.event
+# ボットが起動したときに実行されるイベント
+@client.event
 async def on_ready():
-    """
-    ボットがDiscordに正常にログインし、準備ができたときに実行されます。
-    """
-    print(f"ログインしました: {bot.user.name} (ID: {bot.user.id})")
-    print("---------------------------------------")
+    print(f'ログインしました: {client.user}') # このメッセージがログに出たら成功！
+    print(f'ユーザーID: {client.user.id}')
+    print('------')
 
-@bot.command()
-async def hello(ctx):
-    """
-    '!hello' コマンドに応答します。
-    例: ユーザーが '!hello' と入力すると、ボットが 'Hello [ユーザー名]!' と返信します。
-    """
-    await ctx.send(f"Hello {ctx.author.display_name}!")
+# メッセージを受信したときに実行されるイベント
+@client.event
+async def on_message(message):
+    # ボット自身のメッセージは無視
+    if message.author == client.user:
+        return
 
-# --- ボットの起動ロジック ---
-async def main():
-    """
-    Discordボットを非同期で起動します。
-    keep_aliveサーバーは別で起動されます。
-    """
-    # Discordボットを起動
-    if TOKEN:
-        try:
-            await bot.start(TOKEN)
-        except discord.LoginFailure:
-            print("エラー: Discordボットのトークンが無効です。")
-            print("環境変数 'BOT_TOKEN' を確認してください。")
-        except discord.HTTPException as e:
-            if e.status == 429:
-                print(f"エラー: Discord APIからのレート制限です。しばらく待ってから再試行してください。詳細: {e}")
-            else:
-                print(f"Discord HTTPエラーが発生しました: {e}")
-        except Exception as e:
-            print(f"予期せぬエラーが発生しました: {e}")
-    else:
-        print("エラー: 環境変数 'BOT_TOKEN' が設定されていません。")
+    # "hello" に応答する例
+    if message.content.startswith('hello'):
+        await message.channel.send('Hello!')
 
-if __name__ == "__main__":
-    # keep_aliveサーバーを先に起動
-    keep_alive() # keep_alive.py からインポートされた関数を呼び出す
-    print("Keep-aliveサーバーを起動しました。")
+# Keep-aliveサーバーを別スレッドで起動（Renderの無料プランでボットを稼働させ続けるため）
+keep_alive()
 
-    # その後、Discordボットを非同期で起動
-    asyncio.run(main())
+# Discordボットを実行
+# TOKENがNone（設定されていない）の場合、エラーを出すようにする
+if TOKEN is None:
+    print("エラー: 環境変数 'BOT_TOKEN' が設定されていません。ボットを起動できません。")
+else:
+    try:
+        client.run(TOKEN) # ボットトークンでログインを試みる
+    except discord.errors.LoginFailure:
+        print("エラー: Discordボットのトークンが無効です。")
+        print("Discord開発者ポータルでトークンをリセットし、Renderの環境変数を再確認してください。")
+    except Exception as e:
+        print(f"予期せぬエラーが発生しました: {e}")
