@@ -6,15 +6,16 @@ from keep_alive import keep_alive
 # 環境変数からBotのトークンを取得
 TOKEN = os.getenv('BOT_TOKEN')
 
+# ユーザーごとの通知を保存する辞書（Botのメモリ上に保持されるため、再起動で消えます）
+# 形式: {ユーザーID: [通知1, 通知2, ...]}
+user_notifications = {}
+
 # 必要なインテントを有効にする
-# membersインテントはサーバーメンバーの情報を取得するために必要 (通知機能)
-# message_contentインテントはメッセージの内容を読み取るために必要 (従来のコマンド用)
 intents = discord.Intents.default()
-intents.members = True # メンバー情報を取得するために必要
-intents.message_content = True # メッセージ内容を読み取るために必要
+intents.members = True          # メンバー情報を取得するために必要
+intents.message_content = True  # メッセージ内容を読み取るために必要（従来のコマンド用）
 
 # Botオブジェクトを作成
-# プレフィックス '!' は、もし今後従来のコマンドを追加する際に使用できます。
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # スラッシュコマンドツリーの作成
@@ -38,7 +39,7 @@ async def hello(ctx):
     """
     await ctx.send(f"Hello {ctx.author.display_name}!")
 
-# --- スラッシュコマンド ---
+# --- スラッシュコマンド：通知送信 ---
 
 @tree.command(name="notification", description="ユーザーに通知を送信します。")
 @discord.app_commands.describe(
@@ -53,23 +54,18 @@ async def notification(interaction: discord.Interaction, target_type: str, messa
     - `message_content`: 通知メッセージの内容
     - `role_name`: "role" を選択した場合にロール名を指定
     """
-    # コマンド実行中に「考え中」を表示し、後で非表示にする (エフェメラル: コマンド実行者のみに見える)
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=True) # コマンド実行者のみに見える応答
 
-    # Botがメッセージを送信できるチャンネル (ここではコマンドが実行されたチャンネル)
-    # 実際には、管理者用の特定の通知チャンネルなどに送信することも検討できます
     target_channel = interaction.channel 
 
+    # --- 通知データの保存ロジックを追加 ---
+    # ここではBotのメモリに保存します。永続化にはデータベースが必要です。
+
     if target_type == "all":
-        # 全てのユーザーに通知を送信 (テキストチャンネルへの @everyone メンションとして)
-        # DMで全員に送る場合、メンバーをループして送る必要がありますが、レートリミットに注意が必要です。
-        # 例:
-        # for member in interaction.guild.members:
-        #     if not member.bot: # ボットを除外
-        #         try:
-        #             await member.send(f"管理者からのお知らせ：{message_content}")
-        #         except discord.Forbidden:
-        #             print(f"{member.display_name} ({member.id}) へのDM送信が禁止されています。")
+        # 全てのサーバーメンバーに通知を保存（Bot自身は除く）
+        for member in interaction.guild.members:
+            if not member.bot:
+                user_notifications.setdefault(member.id, []).append(f"[全体通知] {message_content}")
         
         await target_channel.send(f"@everyone {message_content}")
         await interaction.followup.send("全てのユーザーに通知を送信しました。")
@@ -80,18 +76,13 @@ async def notification(interaction: discord.Interaction, target_type: str, messa
             await interaction.followup.send("ロール名を指定してください。例: `/notification role:管理者 message_content:重要な連絡です`")
             return
 
-        # ロール名からロールオブジェクトを取得
         target_role = discord.utils.get(interaction.guild.roles, name=role_name)
 
         if target_role:
-            # 指定されたロールのメンバーにのみ通知を送信 (ロールをメンション)
-            # 特定のロールのメンバーにDMを送る場合の例 (コメントアウトを解除して使用)
-            # for member in target_role.members:
-            #     if not member.bot:
-            #         try:
-            #             await member.send(f"{target_role.name}の皆様へ：{message_content}")
-            #         except discord.Forbidden:
-            #             print(f"{member.display_name} ({member.id}) へのDM送信が禁止されています。")
+            # 指定されたロールのメンバーに通知を保存
+            for member in target_role.members:
+                if not member.bot:
+                    user_notifications.setdefault(member.id, []).append(f"[{target_role.name}向け] {message_content}")
             
             await target_channel.send(f"{target_role.mention} {message_content}")
             await interaction.followup.send(f"ロール「**{role_name}**」のユーザーに通知を送信しました。")
@@ -103,8 +94,43 @@ async def notification(interaction: discord.Interaction, target_type: str, messa
         await interaction.followup.send("無効なターゲットタイプです。「**all**」または「**role**」を指定してください。")
         print("無効なターゲットタイプが指定されました。")
 
+# --- スラッシュコマンド：通知一覧表示 ---
+
+@tree.command(name="smartphone", description="あなたの通知一覧を表示します。")
+async def smartphone(interaction: discord.Interaction):
+    """
+    `/smartphone` コマンド
+    コマンドを実行したユーザーの通知一覧をDMで送信します。
+    """
+    user_id = interaction.user.id
+    
+    # ユーザーの通知を取得
+    notifications = user_notifications.get(user_id, [])
+
+    if notifications:
+        # 通知がある場合、整形してDMで送信
+        notification_list = "\n".join([f"- {n}" for n in notifications])
+        try:
+            await interaction.user.send(f"あなたの通知一覧です:\n{notification_list}")
+            await interaction.response.send_message("あなたの通知一覧をDMに送信しました。", ephemeral=True)
+            print(f"{interaction.user.display_name} ({user_id}) に通知一覧を送信しました。")
+            
+            # 通知を一度表示したらクリアする場合（オプション）
+            # user_notifications[user_id] = []
+            # print(f"{interaction.user.display_name} ({user_id}) の通知をクリアしました。")
+
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "DMを送信できませんでした。DMがブロックされているか、BotからのDMを許可していません。\n"
+                "プライバシー設定で「サーバーにいるメンバーからのダイレクトメッセージを許可する」を有効にしてください。",
+                ephemeral=True
+            )
+            print(f"{interaction.user.display_name} ({user_id}) へのDM送信に失敗しました。")
+    else:
+        # 通知がない場合
+        await interaction.response.send_message("現在、あなたへの新しい通知はありません。", ephemeral=True)
+        print(f"{interaction.user.display_name} ({user_id}) に通知がありませんでした。")
+
 # Botを実行
-# 'keep_alive()' はReplitなどの環境でBotを常時稼働させるために使用されます。
-# ローカルで実行する場合は不要な場合があります。
 keep_alive()
 bot.run(TOKEN)
