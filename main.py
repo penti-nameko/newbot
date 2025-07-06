@@ -18,15 +18,15 @@ intents.message_content = True  # メッセージ内容を読み取るために�
 # Botオブジェクトを作成
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# スラッシュコマンドツリーの作成
-tree = commands.Tree(bot)
+# --- ここから修正 ---
 
+# @bot.event でオンレディイベントを定義し、スラッシュコマンドを同期
 @bot.event
 async def on_ready():
     """BotがDiscordにログインし、準備ができたときに実行されます。"""
     print(f'Botとしてログインしました: {bot.user}')
-    # Botが起動したときにスラッシュコマンドをDiscordに同期
-    await tree.sync()
+    # スラッシュコマンドをDiscordに同期
+    await bot.tree.sync() # bot.tree.sync() に変更
     print("スラッシュコマンドを同期しました。")
 
 # --- 従来のコマンド ---
@@ -41,7 +41,8 @@ async def hello(ctx):
 
 # --- スラッシュコマンド：通知送信 ---
 
-@tree.command(name="notification", description="ユーザーに通知を送信します。")
+# @tree.command の代わりに @bot.tree.command を使用
+@bot.tree.command(name="notification", description="ユーザーに通知を送信します。")
 @discord.app_commands.describe(
     target_type="通知の送信先 (all または role)",
     message_content="通知として送信するメッセージの内容",
@@ -59,7 +60,6 @@ async def notification(interaction: discord.Interaction, target_type: str, messa
     target_channel = interaction.channel 
 
     # --- 通知データの保存ロジックを追加 ---
-    # ここではBotのメモリに保存します。永続化にはデータベースが必要です。
 
     if target_type == "all":
         # 全てのサーバーメンバーに通知を保存（Bot自身は除く）
@@ -96,7 +96,8 @@ async def notification(interaction: discord.Interaction, target_type: str, messa
 
 # --- スラッシュコマンド：通知一覧表示 ---
 
-@tree.command(name="smartphone", description="あなたの通知一覧を表示します。")
+# @tree.command の代わりに @bot.tree.command を使用
+@bot.tree.command(name="smartphone", description="あなたの通知一覧を表示します。")
 async def smartphone(interaction: discord.Interaction):
     """
     `/smartphone` コマンド
